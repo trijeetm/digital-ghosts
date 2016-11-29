@@ -77,7 +77,11 @@ tcp_tracker.on("session", function (session) {
   // data send
   session.on("data send", function (session, data) {
     console.log(session.src_name + " -> " + session.dst_name + " data send " + session.send_bytes_payload + " + " + data.length + " bytes");
-    io.sockets.emit('newPacket', session.src_name + session.dst_name);
+    data = {
+      id: session.src_name + session.dst_name,
+      size: session.send_bytes_payload + data.length
+    }
+    io.sockets.emit('newPacket', data);
   });
 
   // data recv

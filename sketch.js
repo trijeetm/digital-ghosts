@@ -21,7 +21,8 @@ function setup() {
 
   socket.on('newPacket',
     function(data) {
-      var flockID = data;
+      var flockID = data.id;
+      console.log(data.size);
       var flock = flocks.get(flockID);
       for (var i = 0; i < random(1, 10); i++) {
         var boid = new Boid(flock);
@@ -156,9 +157,11 @@ function Boid(flock) {
   this.parentFlock = flock;
   this.acceleration = createVector(0, 0);
   this.velocity = createVector(random(-3, 3), random(-3, 3));
+  // this.velocity = p5.Vector.sub(flock.destination, flock.source);
   this.destination = createVector(flock.destination.x, flock.destination.y);
   this.position = createVector(flock.source.x, flock.source.y);
-  this.r = 3.0;
+  this.r = random(1.0, 5.0);
+  // this.r = 1.0;
   this.maxspeed = 20;    // Maximum speed
   this.maxforce = 0.05; // Maximum steering force
   this.life = 1;
@@ -178,14 +181,14 @@ Boid.prototype.run = function(boids) {
 
 Boid.prototype.applyForce = function(force) {
   // We could add mass here if we want A = F / M
-  this.acceleration.add(force);
+  this.acceleration.add(force.div(this.r));
 }
 
 // We accumulate a new acceleration each time based on three rules
 Boid.prototype.flock = function(boids) {
   var dist = p5.Vector.dist(this.destination, this.position);
 
-  if (dist > 500) {
+  if (dist > 600) {
     var sep = this.separate(boids);   // Separation
     sep.mult(1.5);
     this.applyForce(sep); 
@@ -195,10 +198,10 @@ Boid.prototype.flock = function(boids) {
     this.applyForce(ali);
     
     var coh = this.cohesion(boids);   // Cohesion
-    coh.mult(2.0);
+    coh.mult(3.0);
     this.applyForce(coh);
 
-    var dir = this.home(2.0);
+    var dir = this.home(3.0);
     dir.mult(1.0);
     this.applyForce(dir);
 
@@ -215,20 +218,18 @@ Boid.prototype.flock = function(boids) {
       this.applyForce(ali);
       
       var coh = this.cohesion(boids);   // Cohesion
-      coh.mult(3.0);
+      coh.mult(4.0);
       this.applyForce(coh);
 
-      var dir = this.home(2.5);
+      var dir = this.home(4.0);
       dir.mult(1.0);
       this.applyForce(dir);
 
       this.life = 1;
-    } else if (dist > 50) {
-      var dir = this.home(5.0);
-      dir.mult(1.0);
+    } else if (dist > 25) {
+      var dir = this.home(10.0);
+      dir.mult(3.0);
       this.applyForce(dir); 
-
-      this.life = 0;
     }
     else {
       this.life = -1;
@@ -274,7 +275,7 @@ Boid.prototype.render = function() {
   // Draw a triangle rotated in the direction of velocity
   var theta = this.velocity.heading() + radians(90);
   fill(this.col);
-  stroke(100, 0, 100, 0.5);
+  stroke(100, 0, 100, 0.75);
   push();
   translate(this.position.x,this.position.y);
   rotate(theta);
