@@ -1,86 +1,71 @@
 // Keep track of our socket connection
 var socket;
+var flocks = new Map();
 
 function preload () {
-  // Start a socket connection to the server
-  // Some day we would run this server somewhere else
   socket = io.connect('http://localhost:8080');
-  // We make a named event called 'mouse' and write an
-  // anonymous callback function
-  socket.on('mouseSend',
-    // When we receive data
-    function(data) {
-      console.log("Got: " + data.x + " " + data.y);
-      // Draw a blue circle
-      fill(0,0,255);
-      noStroke();
-      ellipse(data.x,data.y,80,80);
-    }
-  );
-  socket.on('dataPush',
-    // When we receive data
-    function(data) {
-      console.log(data);
-      ellipse(getRandomInt(0, 500),getRandomInt(0, 500),10,10);
-    }
-  );
 }
-
-var flocks = [];
-
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  colorMode(RGB, 255, 255, 255, 1);
+  colorMode(HSB, 100, 100, 100, 1);
 
-  setInterval(function () {
-    var flock = new Flock();
-    flocks.push(flock);
+  socket.on('sessionStart',
+    function(data) {
+      var flockID = data;
+      var flock = new Flock();
+      flocks.set(flockID, flock);
+    }
+  );
 
-    setTimeout(function () {
-      setInterval(function () {
-        for (var i = 0; i < random(1, 10); i++) {
-          var b = new Boid(flock);
-          flock.addBoid(b);
-        }
-      }, random(100, 1000));
-    }, 500);
 
-    setTimeout(function () {
+  socket.on('newPacket',
+    function(data) {
+      var flockID = data;
+      var flock = flocks.get(flockID);
+      for (var i = 0; i < random(1, 10); i++) {
+        var boid = new Boid(flock);
+        flock.addBoid(boid);
+      }
+    }
+  );
+
+  socket.on('sessionEnd',
+    function(data) {
+      var flockID = data;
+      var flock = flocks.get(flockID);
       flock.destroy();
-    }, 10000);
-  }, 1000);
+      // flocks.delete(flockID);
+    }
+  );
 }
 
 function draw() {
-  background(51);
+  background(0);
   flocks.forEach(function (flock) {
     flock.run();
   })
 }
 
-// Add a new boid into the System
-// function mouseDragged() {
-//   var boid = new Boid(mouseX, mouseY, 1, 1);
-//   flock.addBoid(boid);
-// }
-
 // Node object
-function Node(pos, size) {
+function Node(pos, size, col) {
   this.size = 0;
   this.maxSize = size;
   this.state = false;
   this.position = pos;
+  this.col = col;
 }
 
 Node.prototype.create = function () {
   var that = this;
 
   var anim = setInterval(function() {
-    that.size = that.size + 1;
+    that.size = that.size + 0.5;
 
-    if (that.size === that.maxSize)
+    if (that.size >= that.maxSize) {
+      that.size = that.maxSize;
       clearInterval(anim);
+    }
   }, 1);
 }
 
@@ -88,14 +73,18 @@ Node.prototype.destroy = function() {
   var that = this;
 
   var anim = setInterval(function() {
-    that.size = that.size - 1;
+    that.size = that.size - 0.5;
 
-    if (that.size === 0)
+    if (that.size <= 0){
+      that.size = 0.0;
       clearInterval(anim);
+    }
   }, 1);
 }
 
 Node.prototype.render = function() {
+  fill(this.col);
+  stroke(100, 0, 100, 0.5);
   ellipse(this.position.x, this.position.y, this.size, this.size);
 };
 
@@ -108,16 +97,17 @@ function Flock() {
   this.source = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
   this.destination = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
 
-  while (p5.Vector.dist(this.source, this.destination) < 500)
+  while (p5.Vector.dist(this.source, this.destination) < windowHeight / 2)
     this.destination = createVector(random(0, windowWidth), random(0, windowHeight));
 
   // An array for all the boids
   this.boids = []; // Initialize the array
-  this.nodeSize = 30;
+  this.nodeSize = 10.0;
   this.state = 0;
+  this.col = color(random(0, 100), random(20, 40), 100, 1);
 
-  this.srcNode = new Node(this.source, this.nodeSize);
-  this.destNode = new Node(this.destination, this.nodeSize);
+  this.srcNode = new Node(this.source, this.nodeSize, this.col);
+  this.destNode = new Node(this.destination, this.nodeSize, this.col);
 
   that.srcNode.create();
   setTimeout(function () {
@@ -139,7 +129,7 @@ Flock.prototype.destroy = function() {
 };
 
 Flock.prototype.run = function() {
-  if (this.state === 0) return;
+  // if (this.state === 0) return;
   for (var i = 0; i < this.boids.length; i++) {
     this.boids[i].run(this.boids);  // Passing the entire list of boids to each boid individually
   }
@@ -169,9 +159,12 @@ function Boid(flock) {
   this.destination = createVector(flock.destination.x, flock.destination.y);
   this.position = createVector(flock.source.x, flock.source.y);
   this.r = 3.0;
-  this.maxspeed = 10;    // Maximum speed
+  this.maxspeed = 20;    // Maximum speed
   this.maxforce = 0.05; // Maximum steering force
   this.life = 1;
+
+  var c = flock.col;
+  this.col = color(hue(c), saturation(c) * 2, 100, 0.75);
 }
 
 Boid.prototype.run = function(boids) {
@@ -192,7 +185,7 @@ Boid.prototype.applyForce = function(force) {
 Boid.prototype.flock = function(boids) {
   var dist = p5.Vector.dist(this.destination, this.position);
 
-  if (dist > 10 * this.parentFlock.nodeSize) {
+  if (dist > 500) {
     var sep = this.separate(boids);   // Separation
     sep.mult(1.5);
     this.applyForce(sep); 
@@ -205,14 +198,14 @@ Boid.prototype.flock = function(boids) {
     coh.mult(2.0);
     this.applyForce(coh);
 
-    var dir = this.home(1.0);
+    var dir = this.home(2.0);
     dir.mult(1.0);
     this.applyForce(dir);
 
     this.life = 1;
   }
   else {
-    if (dist > 5 * this.parentFlock.nodeSize) {
+    if (dist > 300) {
       var sep = this.separate(boids);   // Separation
       sep.mult(1.25);
       this.applyForce(sep); 
@@ -230,7 +223,7 @@ Boid.prototype.flock = function(boids) {
       this.applyForce(dir);
 
       this.life = 1;
-    } else if (dist > 0.25 * this.parentFlock.nodeSize) {
+    } else if (dist > 50) {
       var dir = this.home(5.0);
       dir.mult(1.0);
       this.applyForce(dir); 
@@ -280,8 +273,8 @@ Boid.prototype.seek = function(target) {
 Boid.prototype.render = function() {
   // Draw a triangle rotated in the direction of velocity
   var theta = this.velocity.heading() + radians(90);
-  fill(127);
-  stroke(200);
+  fill(this.col);
+  stroke(100, 0, 100, 0.5);
   push();
   translate(this.position.x,this.position.y);
   rotate(theta);

@@ -10,8 +10,9 @@ var path = require('path');
 // PCap module
 var pcap = require('pcap'),
     tcp_tracker = new pcap.TCPTracker(),
-    // pcap_session = pcap.createSession('en0', '');
-    pcap_session = pcap.createSession('en0', "ip proto \\tcp");
+    pcap_session = pcap.createSession('en0', '');
+    // pcap_session = pcap.createSession('en0', 'tcp', undefined, false);
+    // pcap_session = pcap.createSession('en0', "ip proto \\tcp");
 // Using the filesystem module
 var fs = require('fs');
 var util = require('util');
@@ -67,32 +68,32 @@ function handleRequest(req, res) {
 // WebSockets work with the HTTP server
 var io = require('socket.io').listen(server);
 
-// tcp_tracker.on('session', function (session) {
-//   console.log("Start of session between " + session.src_name + " and " + session.dst_name);
-//   // io.sockets.emit('dataPush', session);
-//   session.on('end', function (session) {
-//       console.log("End of TCP session between " + session.src_name + " and " + session.dst_name);
-//       io.sockets.emit('dataPush', session);
-//   });
-// });
-
 // tracker emits sessions, and sessions emit data
 tcp_tracker.on("session", function (session) {
-    console.log("Start of TCP session between " + session.src_name + " and " + session.dst_name);
-    session.on("data send", function (session, data) {
-        console.log(session.src_name + " -> " + session.dst_name + " data send " + session.send_bytes_payload + " + " + data.length + " bytes");
-    });
-    session.on("data recv", function (session, data) {
-        console.log(session.dst_name + " -> " + session.src_name + " data recv " + session.recv_bytes_payload + " + " + data.length + " bytes");
-        });
-    session.on("end", function (session) {
-        console.log("End of TCP session between " + session.src_name + " and " + session.dst_name);
-        console.log("Set stats for session: ", session.session_stats());
-    });
+  // start
+  console.log("Start of TCP session between " + session.src_name + " and " + session.dst_name);
+  io.sockets.emit('sessionStart', session.src_name + session.dst_name);
+
+  // data send
+  session.on("data send", function (session, data) {
+    console.log(session.src_name + " -> " + session.dst_name + " data send " + session.send_bytes_payload + " + " + data.length + " bytes");
+    io.sockets.emit('newPacket', session.src_name + session.dst_name);
+  });
+
+  // data recv
+  // session.on("data recv", function (session, data) {
+  //   console.log(session.dst_name + " -> " + session.src_name + " data recv " + session.recv_bytes_payload + " + " + data.length + " bytes");
+  // });
+
+  // end
+  session.on("end", function (session) {
+    console.log("End of TCP session between " + session.src_name + " and " + session.dst_name);
+    io.sockets.emit('sessionEnd', session.src_name + session.dst_name);
+    // console.log("Set stats for session: ", session.session_stats());
+  });
 });
 
 pcap_session.on('packet', function (raw_packet) {
   var packet = pcap.decode.packet(raw_packet);
-  // console.log(util.inspect(packet, true, 2, true));
-  // tcp_tracker.track_packet(packet);
+  tcp_tracker.track_packet(packet);
 });
