@@ -22,9 +22,9 @@ function setup() {
   socket.on('newPacket',
     function(data) {
       var flockID = data.id;
-      console.log(data.size);
+      // console.log(data.size);
       var flock = flocks.get(flockID);
-      for (var i = 0; i < random(1, 10); i++) {
+      for (var i = 0; i < random(1, 5); i++) {
         var boid = new Boid(flock);
         flock.addBoid(boid);
       }
@@ -110,7 +110,38 @@ function Flock() {
   this.srcNode = new Node(this.source, this.nodeSize, this.col);
   this.destNode = new Node(this.destination, this.nodeSize, this.col);
 
+  var scale = [0, 3, 5, 7, 10];
+
   that.srcNode.create();
+  this.noiseLoop;
+  var noise = new p5.Noise();
+  var filter = new p5.BandPass();
+  filter.res(50);
+  var f = midiToFreq(24 + (random(0, 7) * 12));
+  filter.freq(f);
+
+  var attackLevel = 0.05;
+  var releaseLevel = 0;
+
+  var attackTime = 0.001
+  var decayTime = 0.2;
+  var susPercent = 0.2;
+  var releaseTime = 0.5;
+  env = new p5.Env();
+  env.setADSR(attackTime, decayTime, susPercent, releaseTime);
+  env.setRange(attackLevel, releaseLevel);
+
+  
+  noise.amp(env);
+  noise.disconnect();
+  noise.connect(filter);
+  noise.start();
+  env.triggerAttack();
+
+  setTimeout(function () {
+    env.triggerRelease();
+  }, 500);
+
   setTimeout(function () {
     that.destNode.create();
     that.state = 1;
