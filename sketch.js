@@ -24,6 +24,8 @@ function setup() {
       var flockID = data.id;
       // console.log(data.size);
       var flock = flocks.get(flockID);
+      // flock.blip.triggerBlip();
+      if (!flock) return;
       for (var i = 0; i < random(1, 5); i++) {
         var boid = new Boid(flock);
         flock.addBoid(boid);
@@ -35,8 +37,8 @@ function setup() {
     function(data) {
       var flockID = data;
       var flock = flocks.get(flockID);
+      if (!flock) return;
       flock.destroy();
-      // flocks.delete(flockID);
     }
   );
 }
@@ -93,7 +95,7 @@ Node.prototype.render = function() {
 // Does very little, simply manages the array of all the boids
 
 function Flock() {
-  var that = this;
+  var self = this;
 
   this.source = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
   this.destination = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
@@ -110,53 +112,72 @@ function Flock() {
   this.srcNode = new Node(this.source, this.nodeSize, this.col);
   this.destNode = new Node(this.destination, this.nodeSize, this.col);
 
-  var scale = [0, 3, 5, 7, 10];
+  this.srcNode.create();
 
-  that.srcNode.create();
+  // var scale = [0, 3, 5, 7, 10];
+
+// blip
+  // this.blip = new Blip();
+
+// noise 
+
   this.noiseLoop;
-  var noise = new p5.Noise();
-  var filter = new p5.BandPass();
-  filter.res(50);
+  this.noise = new p5.Noise();
+  this.noiseFilter = new p5.BandPass();
+  this.noiseFilter.res(50);
   var f = midiToFreq(24 + (random(0, 7) * 12));
-  filter.freq(f);
+  this.noiseFilter.freq(f);
 
-  var attackLevel = 0.05;
-  var releaseLevel = 0;
-
-  var attackTime = 0.001
-  var decayTime = 0.2;
-  var susPercent = 0.2;
-  var releaseTime = 0.5;
-  env = new p5.Env();
-  env.setADSR(attackTime, decayTime, susPercent, releaseTime);
-  env.setRange(attackLevel, releaseLevel);
-
-  
-  noise.amp(env);
-  noise.disconnect();
-  noise.connect(filter);
-  noise.start();
-  env.triggerAttack();
+  this.noise.disconnect();
+  this.noise.connect(this.noiseFilter);
+  this.noise.amp(0, 0);
+  this.noise.start();
+  this.noise.amp(0.75, 0.1);
 
   setTimeout(function () {
-    env.triggerRelease();
+    self.noise.amp(0.05, 5);
   }, 500);
 
   setTimeout(function () {
-    that.destNode.create();
-    that.state = 1;
+    self.destNode.create();
+    self.state = 1;
   }, 250);
 }
 
-Flock.prototype.destroy = function() {
-  var that = this;
+function Blip() {
+  this.boidOsc = new p5.Oscillator('sine');
+  this.boidOsc.freq(midiToFreq(36));
+  this.boidOsc.amp(0, 0);
+
+  this.rev = new p5.Reverb();
+  this.rev.process(this.boidOsc, 3, 2);
+}
+
+Blip.prototype.triggerBlip = function() {
+  this.boidOsc.start();
+  this.boidOsc.amp(0.5, 0.1);
+  var self = this;
 
   setTimeout(function () {
-    that.srcNode.destroy();
+    self.boidOsc.amp(0, 0.5);
+
     setTimeout(function () {
-      that.destNode.destroy();
-      that.state = 0;
-    }, 500); 
+      self.boidOsc.stop();
+    }, 500);
+  }, 1000);
+};
+
+Flock.prototype.destroy = function() {
+  var self = this;
+
+  this.noise.amp(0, 1);
+
+  setTimeout(function () {
+    self.srcNode.destroy();
+    setTimeout(function () {
+      self.destNode.destroy();
+      self.state = 0;
+    }, 500);
   }, 1000);
 };
 
@@ -199,6 +220,8 @@ function Boid(flock) {
 
   var c = flock.col;
   this.col = color(hue(c), saturation(c) * 2, 100, 0.75);
+
+  // this.blip = new Blip();
 }
 
 Boid.prototype.run = function(boids) {
@@ -222,12 +245,12 @@ Boid.prototype.flock = function(boids) {
   if (dist > 600) {
     var sep = this.separate(boids);   // Separation
     sep.mult(1.5);
-    this.applyForce(sep); 
+    this.applyForce(sep);
 
     var ali = this.align(boids);      // Alignment
     ali.mult(0.75);
     this.applyForce(ali);
-    
+
     var coh = this.cohesion(boids);   // Cohesion
     coh.mult(3.0);
     this.applyForce(coh);
@@ -242,12 +265,12 @@ Boid.prototype.flock = function(boids) {
     if (dist > 300) {
       var sep = this.separate(boids);   // Separation
       sep.mult(1.25);
-      this.applyForce(sep); 
+      this.applyForce(sep);
 
       var ali = this.align(boids);      // Alignment
       ali.mult(1.0);
       this.applyForce(ali);
-      
+
       var coh = this.cohesion(boids);   // Cohesion
       coh.mult(4.0);
       this.applyForce(coh);
@@ -260,7 +283,7 @@ Boid.prototype.flock = function(boids) {
     } else if (dist > 25) {
       var dir = this.home(10.0);
       dir.mult(3.0);
-      this.applyForce(dir); 
+      this.applyForce(dir);
     }
     else {
       this.life = -1;
@@ -406,5 +429,3 @@ Boid.prototype.cohesion = function(boids) {
     return createVector(0,0);
   }
 }
-
-
