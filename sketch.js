@@ -24,8 +24,8 @@ function setup() {
       var flockID = data.id;
       // console.log(data.size);
       var flock = flocks.get(flockID);
-      // flock.blip.triggerBlip();
       if (!flock) return;
+      flock.triggerBlip();
       for (var i = 0; i < random(1, 5); i++) {
         var boid = new Boid(flock);
         flock.addBoid(boid);
@@ -114,15 +114,16 @@ function Flock() {
 
   this.srcNode.create();
 
-  // var scale = [0, 3, 5, 7, 10];
-
-// blip
-  // this.blip = new Blip();
-
 // noise 
-
-  this.noiseLoop;
   this.noise = new p5.Noise();
+
+  var panLvl = 0;
+  if (this.source.x < windowWidth / 2)
+    panLvl = random(-1, -0.8);
+  else
+    panLvl = random(0.8, 1);
+  this.noise.pan(panLvl);
+
   this.noiseFilter = new p5.BandPass();
   this.noiseFilter.res(50);
   var f = midiToFreq(24 + (random(0, 7) * 12));
@@ -130,7 +131,11 @@ function Flock() {
 
   this.noise.disconnect();
   this.noise.connect(this.noiseFilter);
-  this.noise.amp(0, 0);
+
+  // this.rev = new p5.Reverb();
+  // this.rev.process(this.noiseFilter, 3, 2);
+
+  this.noise.amp(0);
   this.noise.start();
   this.noise.amp(0.75, 0.1);
 
@@ -144,27 +149,13 @@ function Flock() {
   }, 250);
 }
 
-function Blip() {
-  this.boidOsc = new p5.Oscillator('sine');
-  this.boidOsc.freq(midiToFreq(36));
-  this.boidOsc.amp(0, 0);
-
-  this.rev = new p5.Reverb();
-  this.rev.process(this.boidOsc, 3, 2);
-}
-
-Blip.prototype.triggerBlip = function() {
-  this.boidOsc.start();
-  this.boidOsc.amp(0.5, 0.1);
+Flock.prototype.triggerBlip = function() {
   var self = this;
+  this.noise.amp(1, 0.1);
 
   setTimeout(function () {
-    self.boidOsc.amp(0, 0.5);
-
-    setTimeout(function () {
-      self.boidOsc.stop();
-    }, 500);
-  }, 1000);
+    self.noise.amp(0.05, 1);
+  }, 500);
 };
 
 Flock.prototype.destroy = function() {
