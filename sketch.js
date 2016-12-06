@@ -14,7 +14,7 @@ function preload () {
         flock.destroy();
       }, random (100, 1000));
     })
-  }, 60000)
+  }, 90000)
 }
 
 function setup() {
