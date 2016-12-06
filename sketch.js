@@ -4,6 +4,17 @@ var flocks = new Map();
 
 function preload () {
   socket = io.connect('http://localhost:8080');
+
+  // for a 60 second performance
+  setTimeout(function () {
+    socket.disconnect();
+
+    flocks.forEach(function (flock) {
+      setTimeout(function () {
+        flock.destroy();
+      }, random (100, 1000));
+    })
+  }, 60000)
 }
 
 function setup() {
