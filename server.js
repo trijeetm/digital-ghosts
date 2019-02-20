@@ -10,7 +10,7 @@ var path = require('path');
 // PCap module
 var pcap = require('pcap'),
     tcp_tracker = new pcap.TCPTracker(),
-    pcap_session = pcap.createSession('en0', '');
+    pcap_session = pcap.createSession("en0", "ip", undefined, false);
     // pcap_session = pcap.createSession('en0', 'tcp', undefined, false);
     // pcap_session = pcap.createSession('en0', "ip proto \\tcp");
 // Using the filesystem module
@@ -29,12 +29,12 @@ console.log('Server started on port 8080');
 function handleRequest(req, res) {
   // What did we request?
   var pathname = req.url;
-  
+
   // If blank let's ask for index.html
   if (pathname == '/') {
     pathname = '/index.html';
   }
-  
+
   // Ok what's our file extension
   var ext = path.extname(pathname);
 
