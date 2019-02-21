@@ -10,7 +10,7 @@ var path = require('path');
 // PCap module
 var pcap = require('pcap'),
     tcp_tracker = new pcap.TCPTracker(),
-    pcap_session = pcap.createSession("en0", "ip", undefined, false);
+    pcap_session = pcap.createSession("en1", "ip", undefined, true);
     // pcap_session = pcap.createSession('en0', 'tcp', undefined, false);
     // pcap_session = pcap.createSession('en0', "ip proto \\tcp");
 // Using the filesystem module
@@ -99,5 +99,6 @@ tcp_tracker.on("session", function (session) {
 
 pcap_session.on('packet', function (raw_packet) {
   var packet = pcap.decode.packet(raw_packet);
+  console.log(packet);
   tcp_tracker.track_packet(packet);
 });

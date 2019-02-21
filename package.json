@@ -14,7 +14,7 @@
   "author": "Trijeet Mukhopadhyay",
   "license": "ISC",
   "dependencies": {
-    "pcap": "git+https://github.com/mranney/node_pcap.git",
+    "pcap": "git+https://github.com/node-pcap/node_pcap",
     "socket.io": "^1.7.0"
   }
 }
