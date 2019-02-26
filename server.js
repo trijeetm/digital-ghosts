@@ -7,23 +7,16 @@ var http = require('http');
 // URL module
 var url = require('url');
 var path = require('path');
-// PCap module
-var pcap = require('pcap'),
-    tcp_tracker = new pcap.TCPTracker(),
-    pcap_session = pcap.createSession("en1", "ip", undefined, true);
-    // pcap_session = pcap.createSession('en0', 'tcp', undefined, false);
-    // pcap_session = pcap.createSession('en0', "ip proto \\tcp");
 // Using the filesystem module
 var fs = require('fs');
 var util = require('util');
 
-// ------
-// server
-// ------
+/*
+    HTTP server setup
+*/
 
 var server = http.createServer(handleRequest);
 server.listen(8080);
-
 console.log('Server started on port 8080');
 
 function handleRequest(req, res) {
@@ -64,41 +57,25 @@ function handleRequest(req, res) {
   );
 }
 
-// WebSocket Portion
-// WebSockets work with the HTTP server
+/*
+    SocketIO setup
+    SocketIO uses the HTTP server
+
+    Example emit:
+    io.sockets.emit(label, data);
+*/
 var io = require('socket.io').listen(server);
 
-// tracker emits sessions, and sessions emit data
-tcp_tracker.on("session", function (session) {
-  // start
-  console.log("Start of TCP session between " + session.src_name + " and " + session.dst_name);
-  io.sockets.emit('sessionStart', session.src_name + session.dst_name);
+/*
+    Websocket setup
+    Websocket server to receive data from python script
+*/
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 8081 });
 
-  // data send
-  session.on("data send", function (session, data) {
-    // console.log(session.src_name + " -> " + session.dst_name + " data send " + session.send_bytes_payload + " + " + data.length + " bytes");
-    data = {
-      id: session.src_name + session.dst_name,
-      size: session.send_bytes_payload + data.length
-    }
-    io.sockets.emit('newPacket', data);
+wss.on('connection', function connection(ws) {
+  ws.on('message', function incoming(message) {
+    console.log('< %s', message);
+    io.sockets.emit('newPacket', message);
   });
-
-  // data recv
-  // session.on("data recv", function (session, data) {
-  //   console.log(session.dst_name + " -> " + session.src_name + " data recv " + session.recv_bytes_payload + " + " + data.length + " bytes");
-  // });
-
-  // end
-  session.on("end", function (session) {
-    console.log("End of TCP session between " + session.src_name + " and " + session.dst_name);
-    io.sockets.emit('sessionEnd', session.src_name + session.dst_name);
-    // console.log("Set stats for session: ", session.session_stats());
-  });
-});
-
-pcap_session.on('packet', function (raw_packet) {
-  var packet = pcap.decode.packet(raw_packet);
-  console.log(packet);
-  tcp_tracker.track_packet(packet);
 });

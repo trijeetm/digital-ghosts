@@ -16,5 +16,8 @@
   "dependencies": {
     "pcap": "git+https://github.com/node-pcap/node_pcap",
     "socket.io": "^1.7.0"
+  },
+  "devDependencies": {
+    "ws": "^6.1.4"
   }
 }

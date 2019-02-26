@@ -1,73 +1,83 @@
 // Keep track of our socket connection
 var socket;
 var flocks = new Map();
+var nodes = new Map();
 
 function preload () {
   socket = io.connect('http://localhost:8080');
 
-  // for a 60 second performance
-  setTimeout(function () {
-    socket.disconnect();
+  fontRM_B = loadFont('assets/roboto-mono/RobotoMono-Bold.ttf');
 
-    flocks.forEach(function (flock) {
-      setTimeout(function () {
-        flock.destroy();
-      }, random (100, 1000));
-    })
-  }, 90000)
+  // for a 60 second performance
+  // setTimeout(function () {
+  //   socket.disconnect();
+  //
+  //   flocks.forEach(function (flock) {
+  //     setTimeout(function () {
+  //       flock.destroy();
+  //     }, random (100, 1000));
+  //   })
+  // }, 90000)
 }
 
+// Processing setup loop
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 100, 100, 100, 1);
 
-  socket.on('sessionStart',
-    function(data) {
-      var flockID = data;
-      var flock = new Flock();
-      flocks.set(flockID, flock);
-    }
-  );
-
-
   socket.on('newPacket',
     function(data) {
-      var flockID = data.id;
-      // console.log(data.size);
-      var flock = flocks.get(flockID);
-      if (!flock) return;
-      flock.triggerBlip();
-      for (var i = 0; i < random(1, 5); i++) {
-        var boid = new Boid(flock);
-        flock.addBoid(boid);
-      }
-    }
-  );
+      console.warn(data);
+      var packetData = JSON.parse(data);
 
-  socket.on('sessionEnd',
-    function(data) {
-      var flockID = data;
-      var flock = flocks.get(flockID);
-      if (!flock) return;
-      flock.destroy();
+      var srcNode = retrieveNode(packetData.src);
+      var dstNode = retrieveNode(packetData.dst);
+
+      srcNode.launchBoid(dstNode.position);
+      srcNode.flock.triggerBlip();
+
     }
   );
 }
 
+// Processing draw loop
 function draw() {
   background(0);
-  flocks.forEach(function (flock) {
-    flock.run();
+  nodes.forEach(function (node) {
+    node.render();
   })
 }
 
+// Returns node matching id, creates one if non-existent
+function retrieveNode(id) {
+  var node = nodes.get(id);
+
+  if (!node) {
+    // create new node (at random position on canvas)
+    var n = new Node(id, 10.0, color(random(0, 100), random(20, 40), 100, 1));
+    n.create();
+    // add to nodes map
+    nodes.set(id, n);
+    node = n;
+
+    var f = new Flock(node.id, node.position, node.col);
+    node.flock = f;
+  }
+
+  return node;
+}
+
 // Node object
-function Node(pos, size, col) {
+function Node(id, size, col, label) {
+  this.id = id;
   this.size = 0;
   this.maxSize = size;
   this.state = false;
-  this.position = pos;
   this.col = col;
+  this.position = createVector(random(40, windowWidth - 40), random(40, windowHeight - 40));
+  this.flock = {};
+
+  this.flockLimit = 1000;
 }
 
 Node.prototype.create = function () {
@@ -97,35 +107,50 @@ Node.prototype.destroy = function() {
 }
 
 Node.prototype.render = function() {
+  // render label
+  fill(255);
+  textAlign(CENTER);
+  textFont(fontRM_B);
+  textSize(10);
+  text(this.id, this.position.x, this.position.y + 16);
+
+  // render flocks
+  this.flock.run();
+
+  // render nodes
   fill(this.col);
-  stroke(100, 0, 100, 0.5);
+  stroke(100, 0, 100, 0);
+  // stroke(100, 0, 100, 0.5);
   ellipse(this.position.x, this.position.y, this.size, this.size);
 };
 
-// Flock object
-// Does very little, simply manages the array of all the boids
+Node.prototype.launchBoid = function (dest) {
+  if (this.flock.boids.size < this.flockLimit) {
+    var b = new Boid(this.flock, dest);
+    this.flock.addBoid(b);
+  }
+};
 
-function Flock() {
+// Flock object
+function Flock(id, srcPos, col) {
   var self = this;
 
-  this.source = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
-  this.destination = createVector(random(120, windowWidth - 120), random(120, windowHeight - 120));
+  this.id = id;
+
+  this.source = srcPos;
+  this.destination = srcPos
 
   while (p5.Vector.dist(this.source, this.destination) < windowHeight / 2)
     this.destination = createVector(random(0, windowWidth), random(0, windowHeight));
 
   // An array for all the boids
-  this.boids = []; // Initialize the array
-  this.nodeSize = 10.0;
+  // this.boids = []; // Initialize the array
+  // A set for all the boids
+  this.boids = new Set();
   this.state = 0;
-  this.col = color(random(0, 100), random(20, 40), 100, 1);
+  this.col = col;
 
-  this.srcNode = new Node(this.source, this.nodeSize, this.col);
-  this.destNode = new Node(this.destination, this.nodeSize, this.col);
-
-  this.srcNode.create();
-
-// noise 
+// noise
   this.noise = new p5.Noise();
 
   var panLvl = 0;
@@ -153,11 +178,6 @@ function Flock() {
   setTimeout(function () {
     self.noise.amp(0.05, 5);
   }, 500);
-
-  setTimeout(function () {
-    self.destNode.create();
-    self.state = 1;
-  }, 250);
 }
 
 Flock.prototype.triggerBlip = function() {
@@ -184,20 +204,21 @@ Flock.prototype.destroy = function() {
 };
 
 Flock.prototype.run = function() {
-  // if (this.state === 0) return;
-  for (var i = 0; i < this.boids.length; i++) {
-    this.boids[i].run(this.boids);  // Passing the entire list of boids to each boid individually
-  }
+  var that = this;
+
+  this.boids.forEach(function (b) {
+      b.run(that.boids);
+  });
+
   this.render();
 }
 
 Flock.prototype.render = function () {
-  this.srcNode.render();
-  this.destNode.render();
+  return;
 }
 
 Flock.prototype.addBoid = function(b) {
-  this.boids.push(b);
+  this.boids.add(b);
 }
 
 // The Nature of Code
@@ -207,12 +228,11 @@ Flock.prototype.addBoid = function(b) {
 // Boid class
 // Methods for Separation, Cohesion, Alignment added
 
-function Boid(flock) {
+function Boid(flock, dest) {
   this.parentFlock = flock;
   this.acceleration = createVector(0, 0);
   this.velocity = createVector(random(-3, 3), random(-3, 3));
-  // this.velocity = p5.Vector.sub(flock.destination, flock.source);
-  this.destination = createVector(flock.destination.x, flock.destination.y);
+  this.destination = dest;
   this.position = createVector(flock.source.x, flock.source.y);
   this.r = random(1.0, 5.0);
   // this.r = 1.0;
@@ -227,7 +247,10 @@ function Boid(flock) {
 }
 
 Boid.prototype.run = function(boids) {
-  if (this.life === -1) return;
+  if (this.life === -1) {
+    this.parentFlock.boids.delete(this);
+    return;
+  };
 
   this.flock(boids);
   this.update();
@@ -331,7 +354,8 @@ Boid.prototype.render = function() {
   // Draw a triangle rotated in the direction of velocity
   var theta = this.velocity.heading() + radians(90);
   fill(this.col);
-  stroke(100, 0, 100, 0.75);
+  stroke(100, 0, 100, 0);
+  // stroke(100, 0, 100, 0.75);
   push();
   translate(this.position.x,this.position.y);
   rotate(theta);
