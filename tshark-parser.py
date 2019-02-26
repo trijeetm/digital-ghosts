@@ -7,7 +7,7 @@ import json
 
 ## command to run - tcp only ##
 # cmd = "tshark -I -i en1 -Y ip"
-cmd = "tshark -i en1 -Y ip"
+cmd = "tshark -i en0 -Y ip"
 
 ## run it ##
 p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)

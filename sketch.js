@@ -30,11 +30,16 @@ function setup() {
       console.warn(data);
       var packetData = JSON.parse(data);
 
+      // if ((packetData.src != "udon.local")) return;
+
       var srcNode = retrieveNode(packetData.src);
       var dstNode = retrieveNode(packetData.dst);
 
       srcNode.launchBoid(dstNode.position);
       srcNode.flock.triggerBlip();
+
+      srcNode.rekindle();
+      dstNode.rekindle();
 
     }
   );
@@ -78,6 +83,8 @@ function Node(id, size, col, label) {
   this.flock = {};
 
   this.flockLimit = 1000;
+  this.baseLife = 10000;
+  this.life = this.baseLife;
 }
 
 Node.prototype.create = function () {
@@ -106,13 +113,34 @@ Node.prototype.destroy = function() {
   }, 1);
 }
 
+Node.prototype.decay = function () {
+  if (this.life >= 0) this.life--;
+  else this.destroy();
+};
+
+Node.prototype.rekindle = function () {
+  if (this.life == -1) this.create();
+  this.life = this.baseLife;
+};
+
 Node.prototype.render = function() {
+  this.decay();
+
   // render label
-  fill(255);
-  textAlign(CENTER);
-  textFont(fontRM_B);
-  textSize(10);
-  text(this.id, this.position.x, this.position.y + 16);
+  if (this.life != -1) {
+    textAlign(CENTER);
+    textFont(fontRM_B);
+    fill(255);
+    textSize(10);
+    if (random(0, 100) < 5) {
+      fill(255 - random(-0, 255));
+      // textSize(10 + random(0, 4));
+      text(this.id, this.position.x, this.position.y + 16);
+    }
+    else {
+      text(this.id, this.position.x, this.position.y + 16);
+    }
+  }
 
   // render flocks
   this.flock.run();
@@ -237,11 +265,12 @@ function Boid(flock, dest) {
   this.r = random(1.0, 5.0);
   // this.r = 1.0;
   this.maxspeed = 20;    // Maximum speed
-  this.maxforce = 0.05; // Maximum steering force
+  this.maxforce = 0.2; // Maximum steering force
   this.life = 1;
 
   var c = flock.col;
   this.col = color(hue(c), saturation(c) * 2, 100, 0.75);
+  this.opacity = 0.75;
 
   // this.blip = new Blip();
 }
@@ -313,6 +342,10 @@ Boid.prototype.flock = function(boids) {
     else {
       this.life = -1;
     }
+
+    if (dist < 50) {
+      this.opacity = dist * (0.75 / 50);
+    }
   }
 }
 
@@ -353,7 +386,8 @@ Boid.prototype.seek = function(target) {
 Boid.prototype.render = function() {
   // Draw a triangle rotated in the direction of velocity
   var theta = this.velocity.heading() + radians(90);
-  fill(this.col);
+  fill(color(hue(this.col), saturation(this.col), brightness(this.col), this.opacity));
+  // fill(this.col);
   stroke(100, 0, 100, 0);
   // stroke(100, 0, 100, 0.75);
   push();
