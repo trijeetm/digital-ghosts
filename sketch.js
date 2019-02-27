@@ -3,6 +3,8 @@ var socket;
 var flocks = new Map();
 var nodes = new Map();
 
+var MAX_NODES_ALLOWED = 100;
+
 function preload () {
   socket = io.connect('http://localhost:8080');
 
@@ -18,6 +20,17 @@ function preload () {
   //     }, random (100, 1000));
   //   })
   // }, 90000)
+
+  setTimeout(function () {
+    console.log("reload");
+    socket.disconnect();
+
+    nodes.forEach(function (node) {
+      node.destroy();
+    });
+
+    location.reload();
+  }, 5 * 60 * 1000)
 }
 
 // Processing setup loop
@@ -27,10 +40,15 @@ function setup() {
 
   socket.on('newPacket',
     function(data) {
-      console.warn(data);
+      // console.warn(data);
       var packetData = JSON.parse(data);
 
-      // if ((packetData.src != "udon.local")) return;
+      // if ((packetData.src == "192.168.180.58") && (packetData.dst == "trijeetm.local")) return;
+      // if ((packetData.dst == "192.168.180.58") && (packetData.src == "trijeetm.local")) return;
+      // if ((packetData.src == "udon.local") || (packetData.src == "192.168.180.58")) return;
+      // if ((packetData.dst == "trijeetm.local") || (packetData.dst == "192.168.182.116")) return;
+      // if ((packetData.dst == "udon.local") || (packetData.dst == "192.168.180.58")) return;
+      // if ((packetData.src == "trijeetm.local") || (packetData.src == "192.168.182.116")) return;
 
       var srcNode = retrieveNode(packetData.src);
       var dstNode = retrieveNode(packetData.dst);
@@ -67,6 +85,15 @@ function retrieveNode(id) {
 
     var f = new Flock(node.id, node.position, node.col);
     node.flock = f;
+
+    // evict nodes if too many
+    if (nodes.size > MAX_NODES_ALLOWED) {
+      var evictedNodeKey = nodes.entries().next().value[0];
+      var evictedNode = nodes.get(evictedNodeKey);
+      // console.log("too many nodes, evicting FIFO", evictedNode);
+      nodes.delete(evictedNodeKey);
+      delete evictedNode;
+    }
   }
 
   return node;
@@ -77,40 +104,51 @@ function Node(id, size, col, label) {
   this.id = id;
   this.size = 0;
   this.maxSize = size;
+  this.goalSize = 0;
   this.state = false;
   this.col = col;
   this.position = createVector(random(40, windowWidth - 40), random(40, windowHeight - 40));
   this.flock = {};
 
-  this.flockLimit = 1000;
-  this.baseLife = 10000;
+  this.flockLimit = 500;
+  this.baseLife = 1200;
   this.life = this.baseLife;
+
+  this.sizeAnimInterval;
 }
 
 Node.prototype.create = function () {
-  var that = this;
-
-  var anim = setInterval(function() {
-    that.size = that.size + 0.5;
-
-    if (that.size >= that.maxSize) {
-      that.size = that.maxSize;
-      clearInterval(anim);
-    }
-  }, 1);
+  this.goalSize = this.maxSize;
+  // clearInterval(this.sizeAnimInterval);
+  //
+  // var that = this;
+  //
+  // this.sizeAnimInterval = setInterval(function() {
+  //   that.size = that.size + 0.25;
+  //
+  //   if (that.size >= that.maxSize) {
+  //     that.size = that.maxSize;
+  //     clearInterval(that.sizeAnimInterval);
+  //   }
+  // }, 1);
+  // this.size = this.maxSize;
 }
 
 Node.prototype.destroy = function() {
-  var that = this;
-
-  var anim = setInterval(function() {
-    that.size = that.size - 0.5;
-
-    if (that.size <= 0){
-      that.size = 0.0;
-      clearInterval(anim);
-    }
-  }, 1);
+  this.goalSize = 0;
+  // clearInterval(this.sizeAnimInterval);
+  //
+  // var that = this;
+  //
+  // this.sizeAnimInterval = setInterval(function() {
+  //   that.size = that.size - 0.25;
+  //
+  //   if (that.size <= 0){
+  //     that.size = 0.0;
+  //     clearInterval(that.sizeAnimInterval);
+  //   }
+  // }, 1);
+  // this.size = 0;
 }
 
 Node.prototype.decay = function () {
@@ -146,16 +184,22 @@ Node.prototype.render = function() {
   this.flock.run();
 
   // render nodes
+  if (this.goalSize > this.size) this.size += 0.5;
+  if (this.goalSize < this.size) this.size -= 0.5;
   fill(this.col);
   stroke(100, 0, 100, 0);
   // stroke(100, 0, 100, 0.5);
-  ellipse(this.position.x, this.position.y, this.size, this.size);
+  if (this.size > 0)
+    ellipse(this.position.x, this.position.y, this.size, this.size);
 };
 
 Node.prototype.launchBoid = function (dest) {
   if (this.flock.boids.size < this.flockLimit) {
-    var b = new Boid(this.flock, dest);
-    this.flock.addBoid(b);
+    var compGainFactor = ceil((this.flockLimit - this.flock.boids.size) / 100);
+    for (var i = 0; i < compGainFactor; i++) {
+      var b = new Boid(this.flock, dest);
+      this.flock.addBoid(b);
+    }
   }
 };
 
@@ -262,7 +306,7 @@ function Boid(flock, dest) {
   this.velocity = createVector(random(-3, 3), random(-3, 3));
   this.destination = dest;
   this.position = createVector(flock.source.x, flock.source.y);
-  this.r = random(1.0, 5.0);
+  this.r = random(2.0, 5.0);
   // this.r = 1.0;
   this.maxspeed = 20;    // Maximum speed
   this.maxforce = 0.2; // Maximum steering force
