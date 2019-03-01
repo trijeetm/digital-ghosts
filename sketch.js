@@ -2,8 +2,12 @@
 var socket;
 var flocks = new Map();
 var nodes = new Map();
+var audioSources = new Array();
 
-var MAX_NODES_ALLOWED = 100;
+var MAX_NODES_ALLOWED = 50;
+var MAX_NOISE_SOURCES = 80;
+var BASELIFE = 600;
+var FLOCK_LIMIT = 300;
 
 function preload () {
   socket = io.connect('http://localhost:8080');
@@ -21,22 +25,35 @@ function preload () {
   //   })
   // }, 90000)
 
-  setTimeout(function () {
-    console.log("reload");
-    socket.disconnect();
-
-    nodes.forEach(function (node) {
-      node.destroy();
-    });
-
-    location.reload();
-  }, 5 * 60 * 1000)
+  // setTimeout(function () {
+  //   console.log("reload");
+  //   socket.disconnect();
+  //
+  //   nodes.forEach(function (node) {
+  //     node.destroy();
+  //   });
+  //
+  //   location.reload();
+  // }, 5 * 60 * 1000);
 }
 
 // Processing setup loop
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 100, 100, 100, 1);
+
+  for (var i = 0; i < MAX_NOISE_SOURCES; i++) {
+    var audioSrc = new Noise(i, i, -1);
+    audioSources.push(audioSrc);
+  }
+
+  var UIinterveneDiv = createDiv('<a href="#">Start audio</a>');
+  UIinterveneDiv.position(0, 0);
+
+  // Start the audio context on a click/touch event
+  userStartAudio().then(function() {
+    UIinterveneDiv.remove();
+  });
 
   socket.on('newPacket',
     function(data) {
@@ -54,7 +71,6 @@ function setup() {
       var dstNode = retrieveNode(packetData.dst);
 
       srcNode.launchBoid(dstNode.position);
-      srcNode.flock.triggerBlip();
 
       srcNode.rekindle();
       dstNode.rekindle();
@@ -99,6 +115,58 @@ function retrieveNode(id) {
   return node;
 }
 
+function Noise(id, x, y) {
+  this.id = id;
+
+  this.noise = new p5.Noise();
+
+  var pos = map(x * (windowWidth / (MAX_NOISE_SOURCES - 1)), 0, windowWidth, -1, 1, true);
+  this.noise.pan(pos);
+
+  this.noiseFilter = new p5.BandPass();
+  this.noiseFilter.res(50);
+  var f = midiToFreq(24 + (random(0, 7) * 12));
+  this.noiseFilter.freq(f);
+
+  this.noise.disconnect();
+  // this.noise.connect(this.noiseFilter);
+  this.noiseFilter.process(this.noise);
+
+
+  // this.rev = new p5.Reverb();
+  // this.rev.process(this.noiseFilter, 1, 50);
+
+  this.noise.amp(0);
+  this.noise.start();
+
+  this.busy = false;
+}
+
+Noise.prototype.triggerBirth = function () {
+  var self = this;
+  this.noise.amp(0.5, 0.2);
+
+  self.noise.amp(0.1, 3, 1);
+}
+
+Noise.prototype.triggerDeath = function () {
+  this.noise.amp(0, 1);
+}
+
+Noise.prototype.triggerWhisper = function() {
+  var self = this;
+
+  if (!this.busy) {
+    this.noise.amp(1, 0.1);
+    this.noise.amp(0.05, 2, 0.5);
+    this.busy = true;
+
+    // setTimeout(function () {
+    //   self.busy = false;
+    // }, 1000)
+  }
+}
+
 // Node object
 function Node(id, size, col, label) {
   this.id = id;
@@ -110,15 +178,19 @@ function Node(id, size, col, label) {
   this.position = createVector(random(40, windowWidth - 40), random(40, windowHeight - 40));
   this.flock = {};
 
-  this.flockLimit = 500;
-  this.baseLife = 1200;
+  this.flockLimit = FLOCK_LIMIT;
+  this.baseLife = BASELIFE;
   this.life = this.baseLife;
 
   this.sizeAnimInterval;
+
+  this.audioSrcIdx = floor(this.position.x / (windowWidth / (MAX_NOISE_SOURCES - 1)));
 }
 
 Node.prototype.create = function () {
   this.goalSize = this.maxSize;
+
+  this.triggerBirth();
   // clearInterval(this.sizeAnimInterval);
   //
   // var that = this;
@@ -136,6 +208,8 @@ Node.prototype.create = function () {
 
 Node.prototype.destroy = function() {
   this.goalSize = 0;
+
+  this.triggerDeath();
   // clearInterval(this.sizeAnimInterval);
   //
   // var that = this;
@@ -195,13 +269,30 @@ Node.prototype.render = function() {
 
 Node.prototype.launchBoid = function (dest) {
   if (this.flock.boids.size < this.flockLimit) {
+    // apply compression with makeup on number of boids emitted
     var compGainFactor = ceil((this.flockLimit - this.flock.boids.size) / 100);
     for (var i = 0; i < compGainFactor; i++) {
       var b = new Boid(this.flock, dest);
       this.flock.addBoid(b);
     }
+
+    // fire audio
+    if (random(0, 100) < 20) this.triggerWhisper();
   }
 };
+
+Node.prototype.triggerBirth = function () {
+  audioSources[this.audioSrcIdx].triggerBirth();
+};
+
+Node.prototype.triggerDeath = function () {
+  audioSources[this.audioSrcIdx].triggerDeath();
+};
+
+Node.prototype.triggerWhisper = function () {
+  audioSources[this.audioSrcIdx].triggerWhisper();
+};
+
 
 // Flock object
 function Flock(id, srcPos, col) {
@@ -221,45 +312,7 @@ function Flock(id, srcPos, col) {
   this.boids = new Set();
   this.state = 0;
   this.col = col;
-
-// noise
-  this.noise = new p5.Noise();
-
-  var panLvl = 0;
-  if (this.source.x < windowWidth / 2)
-    panLvl = random(-1, -0.8);
-  else
-    panLvl = random(0.8, 1);
-  this.noise.pan(panLvl);
-
-  this.noiseFilter = new p5.BandPass();
-  this.noiseFilter.res(50);
-  var f = midiToFreq(24 + (random(0, 7) * 12));
-  this.noiseFilter.freq(f);
-
-  this.noise.disconnect();
-  this.noise.connect(this.noiseFilter);
-
-  // this.rev = new p5.Reverb();
-  // this.rev.process(this.noiseFilter, 3, 2);
-
-  this.noise.amp(0);
-  this.noise.start();
-  this.noise.amp(0.75, 0.1);
-
-  setTimeout(function () {
-    self.noise.amp(0.05, 5);
-  }, 500);
 }
-
-Flock.prototype.triggerBlip = function() {
-  var self = this;
-  this.noise.amp(1, 0.1);
-
-  setTimeout(function () {
-    self.noise.amp(0.05, 1);
-  }, 500);
-};
 
 Flock.prototype.destroy = function() {
   var self = this;

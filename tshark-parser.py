@@ -6,8 +6,8 @@ import websockets
 import json
 
 ## command to run - tcp only ##
-cmd = 'tshark -I -i en1 -Y ip'
-# cmd = "tshark -i en0 -Y ip"
+# cmd = 'tshark -I -i en1 -Y ip'
+cmd = "tshark -i en0 -Y ip"
 
 ## run it ##
 p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
@@ -34,16 +34,9 @@ def start_sniffer():
         if out != '':
             packetData = parseTshark(out)
             # print(repr(packetData))
-            # if (
-            #     (not ((packetData["dst"] == "trijeetm.local") & (packetData["src"] == "192.168.180.58")))
-            #     and
-            #     (not ((packetData["src"] == "trijeetm.local") & (packetData["dst"] == "192.168.180.58")))
-            #     ):
-            filterList = ["TrijeetM.local", "udon.local", "192.168.182.116", "192.168.180.58"]
-            if (packetData["src"] not in filterList) and (packetData["dst"] not in filterList):
-                asyncio.get_event_loop().run_until_complete(send_WS_message(json.dumps(packetData)))
-            # sys.stdout.write(out)
-            # sys.stdout.flush()
+            # filterList = ["TrijeetM.local", "udon.local", "192.168.182.116", "192.168.180.58"]
+            # if (packetData["src"] not in filterList) and (packetData["dst"] not in filterList):
+            asyncio.get_event_loop().run_until_complete(send_WS_message(json.dumps(packetData)))
 
 async def send_WS_message(msg):
     async with websockets.connect('ws://trijeetm.local:8081') as websocket:
